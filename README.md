@@ -8,10 +8,10 @@ Problem: Design and implement a distributed task processing system where multipl
 
 Concepts:
 
-Task scheduling and processing with deadlines
-Goroutines and channels for concurrency and communication
-context.WithTimeout for handling task timeouts
-Simulated inter-server communication
+- Task scheduling and processing with deadlines
+- Goroutines and channels for concurrency and communication
+- context.WithTimeout for handling task timeouts
+- Simulated inter-server communication
 
 
 Problem 2: **Producer-Consumer Problem with Channels**
