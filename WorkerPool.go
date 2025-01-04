@@ -1,8 +1,7 @@
-// A worker pool implementation to process tasks concurrently, where each task is the square of a number.
-
 package main
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -10,7 +9,9 @@ import (
 
 // Task represents a unit of work to be processed by the workers.
 type Task struct {
-	Number int
+	ID        int
+	Work      func(ctx context.Context) (int, error)
+	Completed chan struct{}      
 }
 
 // Worker represents a worker that processes tasks.
@@ -20,6 +21,17 @@ type Worker struct {
 	Quit    chan bool
 	Results chan int
 	wg      *sync.WaitGroup
+}
+
+// WorkerPool manages a pool of worker goroutines.
+type WorkerPool struct {
+	Workers    []Worker
+	Tasks      chan Task
+	Results    chan int
+	NumWorkers int
+	ctx        context.Context
+	cancel     context.CancelFunc
+	wg         sync.WaitGroup
 }
 
 // NewWorkerInstance creates and returns a new Worker.
@@ -34,7 +46,7 @@ func NewWorkerInstance(id int, tasks chan Task, results chan int, wg *sync.WaitG
 }
 
 // StartWorker begins the worker's process to fetch tasks and process them.
-func (w Worker) StartWorker() {
+func (w Worker) StartWorker(ctx context.Context) {
 	go func() {
 		defer w.wg.Done()
 		for {
@@ -43,85 +55,102 @@ func (w Worker) StartWorker() {
 				if !ok {
 					return
 				}
-				result := task.Number * task.Number
-				w.Results <- result
+				select {
+				case <-ctx.Done():
+					fmt.Printf("Worker %d: task %d canceled\n", w.ID, task.ID)
+				default:
+					result, err := task.Work(ctx)
+					if err == nil {
+						w.Results <- result
+					} else {
+						fmt.Printf("Worker %d: error processing task %d: %v\n", w.ID, task.ID, err)
+					}
+				}
+				close(task.Completed)
 			case <-w.Quit:
+				fmt.Printf("Worker %d: shutting down\n", w.ID)
 				return
 			}
 		}
 	}()
 }
 
-// Pool represents a pool of workers managing tasks and results.
-type Pool struct {
-	Workers    []Worker
-	Tasks      chan Task
-	Results    chan int
-	NumWorkers int
-}
-
-// NewPoolInstance creates and returns a new WorkerPool.
-func NewPoolInstance(numWorkers, numTasks int) *Pool {
-	tasks := make(chan Task, numTasks)
-	results := make(chan int, numTasks)
-	return &Pool{
+// NewWorkerPool creates and returns a new WorkerPool.
+func NewWorkerPool(numWorkers int) *WorkerPool {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &WorkerPool{
 		Workers:    make([]Worker, numWorkers),
-		Tasks:      tasks,
-		Results:    results,
+		Tasks:      make(chan Task),
+		Results:    make(chan int),
 		NumWorkers: numWorkers,
+		ctx:        ctx,
+		cancel:     cancel,
 	}
 }
 
-// StartPool initializes the workers, assigns tasks, and starts the task processing.
-func (p *Pool) StartPool() {
-	var wg sync.WaitGroup
-	for i := 0; i < p.NumWorkers; i++ {
-		p.Workers[i] = NewWorkerInstance(i+1, p.Tasks, p.Results, &wg)
-		wg.Add(1)
-		p.Workers[i].StartWorker()
+// StartPool initializes the workers and begins task processing.
+func (wp *WorkerPool) StartPool() {
+	for i := 0; i < wp.NumWorkers; i++ {
+		worker := NewWorkerInstance(i+1, wp.Tasks, wp.Results, &wp.wg)
+		wp.Workers[i] = worker
+		wp.wg.Add(1)
+		worker.StartWorker(wp.ctx)
 	}
-
-	// Add tasks to the tasks channel.
-	for i := 1; i <= cap(p.Tasks); i++ {
-		p.Tasks <- Task{Number: i}
-	}
-
-	close(p.Tasks)
-
-	wg.Wait()
-
-	close(p.Results)
 }
 
-// DisplayResults prints the results
-func (p *Pool) DisplayResults() {
-	for result := range p.Results {
+// AddTask adds a new task to the pool.
+func (wp *WorkerPool) AddTask(task Task) {
+	wp.Tasks <- task
+}
+
+// StopPool signals all workers to stop and waits for them to finish.
+func (wp *WorkerPool) StopPool() {
+	close(wp.Tasks) 
+	wp.cancel()  
+	for _, worker := range wp.Workers {
+		worker.Quit <- true
+	}
+	wp.wg.Wait()
+	close(wp.Results) 
+}
+
+func (wp *WorkerPool) DisplayResults() {
+	for result := range wp.Results {
 		fmt.Println("Result:", result)
 	}
 }
 
-// StopPool signals all workers to stop.
-func (p *Pool) StopPool() {
-	for _, worker := range p.Workers {
-		worker.Quit <- true
-	}
-}
-
-
 func main() {
 	numWorkers := 3
-	numTasks := 15
 
-	// Create a pool of workers and start processing tasks.
-	pool := NewPoolInstance(numWorkers, numTasks)
+	pool := NewWorkerPool(numWorkers)
 	pool.StartPool()
 
-	// Display the processed results.
+	for i := 1; i <= 10; i++ {
+		taskID := i
+		task := Task{
+			ID: taskID,
+			Work: func(ctx context.Context) (int, error) {
+				select {
+				case <-ctx.Done():
+					return 0, ctx.Err()
+				case <-time.After(2 * time.Second): 
+					fmt.Printf("Task %d completed\n", taskID)
+					return taskID * taskID, nil
+				}
+			},
+			Completed: make(chan struct{}),
+		}
+		pool.AddTask(task)
+	}
+
+	go func() {
+		time.Sleep(5 * time.Second)
+		fmt.Println("Cancelling remaining tasks...")
+		pool.StopPool()
+	}()
+
 	pool.DisplayResults()
 
-	// Gracefully stop all workers.
-	pool.StopPool()
-
-	// Allow time for workers to shut down before program exits.
-	time.Sleep(time.Second)
+	fmt.Println("All workers shut down.")
 }
