@@ -20,10 +20,11 @@ Problem: Implement the producer-consumer problem using goroutines and channels
 [ producerConsumer.go ]
 
 Concepts:
-* Producer-consumer problem
-* Goroutines
-* Channels
-* Synchronization
+
+- Producer-consumer problem
+- Goroutines
+- Channels
+- Synchronization
 
 
 Problem 3: **Rate Limiter Using Goroutines and Mutex**
@@ -32,20 +33,22 @@ Problem: Implement a simple rate limiter that allows only n requests per secon
 [ rateLimiter.go ]
 
 Concepts:
-* Goroutines
-* sync.Mutex
-* Rate limiting
-* Timing
+
+- Goroutines
+- sync.Mutex
+- Rate limiting
+- Timing
 
 Problem 4: **Implement a Worker Pool for Task Processing**
 
 Problem: Create a simple worker pool that processes a set of tasks concurrently. The task could be something simple like squaring integers. Each worker in the pool will pick tasks from a shared queue and process them. Use channels for communication between the main routine and workers, and ensure that the pool shuts down gracefully once all tasks are completed.
 
 Concepts:
-* Worker pool
-* Goroutines
-* Channels
-* Task scheduling and synchronization
+
+- Worker pool
+- Goroutines
+- Channels
+- Task scheduling and synchronization
 
 
 Problem 4 : **Graceful Shutdown of a Web Server**
@@ -54,6 +57,6 @@ Problem: Write a Go web server that allows graceful shutdown. When the server 
 [ gracefulShutDown.go ]
 
 Concepts:
-* Graceful shutdown
-* context.WithCancel
-* Handling OS signals
+- Graceful shutdown
+- context.WithCancel
+- Handling OS signals
